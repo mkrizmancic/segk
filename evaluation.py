@@ -6,7 +6,7 @@ from sklearn.cluster import AgglomerativeClustering
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neighbors import NearestNeighbors
 from sklearn.model_selection import KFold
-from sklearn.metrics import accuracy_score, f1_score, homogeneity_score, completeness_score, silhouette_score
+from sklearn.metrics import accuracy_score, f1_score, homogeneity_score, completeness_score, silhouette_score, mean_absolute_percentage_error, mean_absolute_error
 
 
 def evaluate_clustering(embeddings, y):
@@ -28,7 +28,7 @@ def evaluate_clustering(embeddings, y):
 def evaluate_classification(embeddings, y):
     avg_accs = list()
     avg_f1 = list()
-    
+
     for i in range(len(embeddings)):
         avg_accs.append(list())
         avg_f1.append(list())
@@ -37,11 +37,11 @@ def evaluate_classification(embeddings, y):
         kf = KFold(n_splits=10, shuffle=True)
         accs = list()
         f1 = list()
-        
+
         for j in range(len(embeddings)):
             accs.append(list())
             f1.append(list())
-        
+
         for train_index, test_index in kf.split(embeddings[0]):
 
             y_train = y[train_index]
@@ -55,17 +55,17 @@ def evaluate_classification(embeddings, y):
                 y_pred = clf.predict(X_test)
                 accs[j].append(accuracy_score(y_pred, y_test))
                 f1[j].append(f1_score(y_pred, y_test, average='macro'))
-        
+
         for j in range(len(embeddings)):
             avg_accs[j].append(np.mean(accs[j]))
             avg_f1[j].append(np.mean(f1[j]))
-            
+
     accs = list()
     f1 = list()
     for i in range(len(embeddings)):
         accs.append(np.mean(avg_accs[i]))
         f1.append(np.mean(avg_f1[i]))
-    
+
     return accs, f1
 
 
@@ -84,21 +84,21 @@ def evaluate_graph_classification(K, y):
     n_iters = 10
 
     # Set the seed for uniform parameter distribution
-    random.seed(None) 
-    np.random.seed(None) 
+    random.seed(None)
+    np.random.seed(None)
 
     # Number of splits of the data
     splits = 10
 
     # Normalize kernel matrix
     K = normalizekm(K)
-    
+
     y = y.reshape((-1,1))
     y = np.ravel(y)
 
     # Size of the dataset
     n = K.shape[0]
-    
+
     # Set up the parameters
     C_grid = 10. ** np.arange(-3,5,1) / n
 
@@ -177,6 +177,129 @@ def evaluate_graph_classification(K, y):
                     correct_pred.append(1)
                 else:
                     correct_pred.append(0)
+
+            #print("\nThe best performance is for trial %d with parameter C = %3f" % (max_idx, C_opt))
+            #print("The best performance on the validation set is: %3f" % perf_val_opt)
+            #print("The corresponding performance on test set is: %3f" % perf_test_opt)
+
+            # append the best performance on validation
+            # at the current split
+            val_split.append(perf_val_opt)
+
+            # append the correponding performance on the test set
+            test_split.append(perf_test_opt)
+
+        # mean of the validation performances over the splits
+        val_mean.append(np.mean(np.asarray(val_split)))
+        # std deviation of validation over the splits
+        val_std = np.std(np.asarray(val_split))
+
+        # mean of the test performances over the splits
+        test_mean.append(np.mean(np.asarray(test_split)))
+        # std deviation of the test oer the splits
+        test_std = np.std(np.asarray(test_split))
+
+        #print("\nMean performance on val set: %3f" % val_mean[j])
+        #print("With standard deviation: %3f" % val_std)
+        #print("\nMean performance on test set: %3f" % test_mean[j])
+        #print("With standard deviation: %3f" % test_std)
+
+    print("\nMean performance on val set in %d iterations: %3f" % (n_iters, np.mean(np.asarray(val_mean))))
+    print("With standard deviation: %3f" % np.std(np.asarray(val_mean)))
+    print("\nMean performance on test set in %d iterations: %3f" % (n_iters, np.mean(np.asarray(test_mean))))
+    print("With standard deviation: %3f" % np.std(np.asarray(test_mean)))
+
+
+def evaluate_graph_regression(K, y):
+    # Number of parameter trials
+    trials = 8
+    n_iters = 10
+
+    # Set the seed for uniform parameter distribution
+    random.seed(None)
+    np.random.seed(None)
+
+    # Number of splits of the data
+    splits = 10
+
+    # Normalize kernel matrix
+    K = normalizekm(K)
+
+    y = y.reshape((-1,1))
+    y = np.ravel(y)
+
+    # Size of the dataset
+    n = K.shape[0]
+
+    # Set up the parameters
+    C_grid = 10. ** np.arange(-3,5,1) / n
+
+    val_mean = []
+    test_mean = []
+
+    for k in range(n_iters):
+        #print("Starting iteration %d..." % (k+1))
+
+        # Initialize the performance of the best parameter trial on validation
+        # With the corresponding performance on test
+        val_split = []
+        test_split = []
+
+        kf = KFold(n_splits=splits, shuffle=True)
+
+        # For each split of the data
+        it = 0
+        for train_index, test_index in kf.split(K):
+            it += 1
+            #print("Starting split %d..." % it)
+
+            # Set the training, validation and test
+            # Note: the percentage can be set up by the user
+            num_train = int((len(train_index) * 80)/100) #90% (of train + val) for training
+            num_val = len(train_index) - num_train       # ~10% (of train + val) for validation
+
+            idx = np.random.permutation(len(train_index))
+            vtr_idx, vte_idx =  train_index[idx[:num_train]], train_index[idx[num_train:]]
+
+            # Split the kernel matrices
+            K_train = K[np.ix_(vtr_idx, vtr_idx)]
+            K_val = K[np.ix_(vte_idx, vtr_idx)]
+            K_test = K[np.ix_(test_index, vtr_idx)]
+
+            # Split the targets
+            y_train = y[vtr_idx]
+            y_val = y[vte_idx]
+            y_test = y[test_index]
+
+            # Record the performance for each parameter trial
+            # respectively on validation and test set
+            perf_all_val = []
+            perf_all_test = []
+
+            # For each parameter trial
+            for i in range(trials):
+                # Fit classifier1 on training data
+                reg = svm.SVR(kernel = 'precomputed', C = C_grid[i])
+                reg.fit(K_train, y_train)
+
+                # predict on validation and test
+                y_pred = reg.predict(K_val)
+
+                # accuracy on validation set
+                mape = mean_absolute_error(y_val, y_pred)
+                perf_all_val.append(mape)
+
+            # get optimal parameter on validation (argmax accuracy)
+            max_idx = np.argmax(perf_all_val)
+            C_opt = C_grid[max_idx]
+
+            # performance corresponsing to the optimal parameter on validation
+            perf_val_opt = perf_all_val[max_idx]
+
+            reg = svm.SVR(kernel = 'precomputed', C = C_opt)
+            reg.fit(K[np.ix_(train_index, train_index)], y[train_index])
+            y_pred = reg.predict(K[np.ix_(test_index, train_index)])
+            perf_test_opt = mean_absolute_error(y_test, y_pred)
 
             #print("\nThe best performance is for trial %d with parameter C = %3f" % (max_idx, C_opt))
             #print("The best performance on the validation set is: %3f" % perf_val_opt)

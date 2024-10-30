@@ -17,9 +17,9 @@ def read_edgelist(path, delimiter, nodetype=str, cols=2):
             nodes.add(e[0])
         if e[1] not in nodes:
             nodes.add(e[1])
-            
-    nodes = list(nodes)         
-    
+
+    nodes = list(nodes)
+
     return nodes, edges
 
 
@@ -69,20 +69,20 @@ def extract_egonets(edgelist, radius, node_labels=None):
     return egonet_edges, egonet_node_labels
 
 
-def load_graph_classification_data(ds_name, use_node_labels):
+def load_graph_data(ds_name, use_node_labels, task="classification"):
     nodes = list()
     edges = list()
     graph_indicator = dict()
     node_labels = None
 
-    with open("datasets/graph_classification/%s/%s_graph_indicator.txt"%(ds_name,ds_name), "r") as f:
+    with open(f"datasets/graph_{task}/{ds_name}/{ds_name}_graph_indicator.txt", "r") as f:
         c = 1
         for line in f:
             graph_indicator[c] = int(line[:-1])
             nodes.append(c)
             c += 1
 
-    with open("datasets/graph_classification/%s/%s_A.txt"%(ds_name,ds_name), "r") as f:
+    with open(f"datasets/graph_{task}/{ds_name}/{ds_name}_A.txt", "r") as f:
         for line in f:
             edge = line[:-1].split(",")
             edge[1] = edge[1].replace(" ", "")
@@ -90,24 +90,25 @@ def load_graph_classification_data(ds_name, use_node_labels):
 
     if use_node_labels:
         node_labels = dict()
-        with open("datasets/graph_classification/%s/%s_node_labels.txt"%(ds_name,ds_name), "r") as f:
+        with open(f"datasets/graph_{task}/{ds_name}/{ds_name}_node_labels.txt", "r") as f:
             c = 1
             for line in f:
                 node_labels[c] = int(line[:-1])
                 c += 1
 
     class_labels = list()
-    with open("datasets/graph_classification/%s/%s_graph_labels.txt"%(ds_name,ds_name), "r") as f:
+    parse = int if task == "classification" else float
+    with open(f"datasets/graph_{task}/{ds_name}/{ds_name}_graph_labels.txt", "r") as f:
         for line in f:
-            class_labels.append(int(line[:-1]))
+            class_labels.append(parse(line[:-1]))
 
     class_labels  = np.array(class_labels, dtype=np.float32)
     return nodes, edges, graph_indicator, node_labels, class_labels
 
- 
+
 def pyramid_match_kernel(Us, d=20, L=4):
     N = len(Us)
-    
+
     Hs = {}
     for i in range(N):
         n = Us[i].shape[0]
